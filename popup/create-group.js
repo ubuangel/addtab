@@ -15,14 +15,25 @@ document.addEventListener('DOMContentLoaded', () => {
         action: 'createGroup',
         groupName: groupName
       }).then(() => {
-        // Cerrar la ventana emergente
-        window.close();
+        // El background script se encargará de cerrar la ventana
+        // No necesitamos llamar a window.close() aquí
+      }).catch(error => {
+        console.error("Error al enviar mensaje:", error);
       });
     }
   });
   
   // Manejar el botón de cancelar
   cancelButton.addEventListener('click', () => {
-    window.close();
+    // Notificar al background script que se canceló la creación del grupo
+    // El background script se encargará de cerrar la pestaña y limpiar la información temporal
+    browser.runtime.sendMessage({
+      action: 'cancelGroupCreation'
+    }).then(() => {
+      console.log("Mensaje de cancelación enviado correctamente");
+      // No necesitamos cerrar la pestaña aquí, el background script lo hará
+    }).catch(error => {
+      console.error("Error al enviar mensaje de cancelación:", error);
+    });
   });
 });

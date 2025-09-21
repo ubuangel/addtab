@@ -9,7 +9,7 @@ function initializeExtension() {
     console.log("Datos cargados desde almacenamiento:", result);
     if (result.tabGroups) {
       tabGroups = result.tabGroups;
-      console.log("Grupos de pestañas cargados:", tabGroups);
+      console.log("Grupos de pestañas cargados:", JSON.stringify(tabGroups));
     } else {
       console.log("No se encontraron grupos guardados");
       // Inicializar con un grupo de ejemplo para pruebas
@@ -23,6 +23,11 @@ function initializeExtension() {
         console.log("Grupo de ejemplo creado y guardado");
       });
     }
+  }).then(() => {
+    // Actualizar el menú contextual después de asegurarnos de que los grupos están cargados
+    return updateContextMenu();
+  }).catch(error => {
+    console.error("Error al inicializar la extensión:", error);
   });
 }
 
@@ -47,83 +52,116 @@ browser.runtime.onStartup.addListener(() => {
 // Función para crear el menú contextual inicial
 function createContextMenu() {
   console.log("Creando menú contextual inicial");
-  // Crear menú contextual principal
-  browser.contextMenus.create({
-    id: "add-to-tab-group",
-    title: "Añadir a grupo de pestañas",
-    contexts: ["tab", "page"]
-  });
-  
-  // Actualizar los elementos del menú contextual
-  updateContextMenu();
+  // Simplemente llamar a updateContextMenu, que ahora se encarga de crear todo el menú
+  return updateContextMenu();
 }
 
 // Escuchar mensajes del popup
 browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'createGroup') {
+    console.log("Recibido mensaje para crear grupo:", message);
     // Obtener la información de la pestaña guardada temporalmente
-    browser.storage.local.get('tempTabInfo').then((result) => {
+    return browser.storage.local.get('tempTabInfo').then((result) => {
       if (result.tempTabInfo) {
+        console.log("Información temporal encontrada:", result.tempTabInfo);
         // Obtener la pestaña por su ID
-        browser.tabs.get(result.tempTabInfo.tabId).then((tab) => {
+        return browser.tabs.get(result.tempTabInfo.tabId).then((tab) => {
           // Crear el grupo con el nombre recibido
           createNewGroup(message.groupName, tab);
           
-          // Cerrar la ventana emergente si aún está abierta
-          if (result.tempTabInfo.windowId) {
-            browser.windows.remove(result.tempTabInfo.windowId);
+          // Cerrar la pestaña del popup si existe
+          if (result.tempTabInfo.popupTabId) {
+            console.log("Intentando cerrar pestaña con ID:", result.tempTabInfo.popupTabId);
+            return browser.tabs.remove(result.tempTabInfo.popupTabId).catch(error => {
+              console.log("Error al cerrar la pestaña:", error);
+              // La pestaña probablemente ya fue cerrada por el usuario
+            }).finally(() => {
+              // Limpiar la información temporal
+              console.log("Limpiando información temporal");
+              return browser.storage.local.remove('tempTabInfo');
+            });
+          } else {
+            // Limpiar la información temporal
+            console.log("No hay ID de pestaña, limpiando información temporal");
+            return browser.storage.local.remove('tempTabInfo');
           }
-          
-          // Limpiar la información temporal
-          browser.storage.local.remove('tempTabInfo');
+        }).catch(error => {
+          console.error("Error al obtener la pestaña:", error);
+          // Limpiar la información temporal en caso de error
+          return browser.storage.local.remove('tempTabInfo');
         });
+      } else {
+        console.log("No se encontró información temporal");
+        return Promise.resolve();
       }
     });
-    
-    // Enviar respuesta para que el popup sepa que el mensaje fue recibido
-    return Promise.resolve();
-  }
+  } else if (message.action === 'cancelGroupCreation') {
+    console.log("Cancelando creación de grupo");
+    // Obtener la información temporal para cerrar la pestaña
+    return browser.storage.local.get('tempTabInfo').then((result) => {
+      if (result.tempTabInfo) {
+        // Cerrar la pestaña del popup si existe
+        if (result.tempTabInfo.popupTabId) {
+          console.log("Cerrando pestaña del popup después de cancelar:", result.tempTabInfo.popupTabId);
+          browser.tabs.remove(result.tempTabInfo.popupTabId).catch(error => {
+            console.log("Error al cerrar la pestaña:", error);
+          });
+        }
+        // Limpiar la información temporal
+        console.log("Limpiando información temporal después de cancelar");
+        return browser.storage.local.remove('tempTabInfo');
+      }
+      return Promise.resolve();
+    });
 });
 
 // Función para actualizar el menú contextual con los grupos existentes
 function updateContextMenu() {
-  console.log("Actualizando menú contextual", tabGroups);
-  // Primero eliminar todos los elementos del menú excepto el principal
-  browser.contextMenus.removeAll().then(() => {
-    // Recrear el menú principal
-    browser.contextMenus.create({
-      id: "add-to-tab-group",
-      title: "Añadir a grupo de pestañas",
-      contexts: ["tab", "page"]
-    });
+  // Obtener los grupos actualizados del almacenamiento local
+  return browser.storage.local.get('tabGroups').then(result => {
+    // Actualizar la variable global con los datos más recientes
+    tabGroups = result.tabGroups || {};
+    console.log("Actualizando menú contextual con grupos:", JSON.stringify(tabGroups));
     
-    // Añadir opción para crear un nuevo grupo
-    browser.contextMenus.create({
-      id: "create-new-group",
-      title: "Crear nuevo grupo...",
-      contexts: ["tab", "page"],
-      parentId: "add-to-tab-group"
-    });
-    
-    // Añadir separador si hay grupos existentes
-    if (Object.keys(tabGroups).length > 0) {
+    // Primero eliminar todos los elementos del menú excepto el principal
+    return browser.contextMenus.removeAll().then(() => {
+      // Recrear el menú principal
       browser.contextMenus.create({
-        id: "separator-1",
-        type: "separator",
+        id: "add-to-tab-group",
+        title: "Añadir a grupo de pestañas",
+        contexts: ["tab", "page"]
+      });
+      
+      // Añadir opción para crear un nuevo grupo
+      browser.contextMenus.create({
+        id: "create-new-group",
+        title: "Crear nuevo grupo...",
         contexts: ["tab", "page"],
         parentId: "add-to-tab-group"
       });
-    }
-    
-    // Añadir cada grupo existente al menú
-    for (const groupId in tabGroups) {
-      browser.contextMenus.create({
-        id: `group-${groupId}`,
-        title: tabGroups[groupId].name,
-        contexts: ["tab", "page"],
-        parentId: "add-to-tab-group"
-      });
-    }
+      
+      // Añadir separador si hay grupos existentes
+      if (Object.keys(tabGroups).length > 0) {
+        browser.contextMenus.create({
+          id: "separator-1",
+          type: "separator",
+          contexts: ["tab", "page"],
+          parentId: "add-to-tab-group"
+        });
+      }
+      
+      // Añadir cada grupo existente al menú
+      for (const groupId in tabGroups) {
+        browser.contextMenus.create({
+          id: `group-${groupId}`,
+          title: tabGroups[groupId].name,
+          contexts: ["tab", "page"],
+          parentId: "add-to-tab-group"
+        });
+      }
+    });
+  }).catch(error => {
+    console.error("Error al actualizar el menú contextual:", error);
   });
 }
 
@@ -145,15 +183,21 @@ browser.contextMenus.onClicked.addListener((info, tab) => {
 // Función para manejar la acción del menú contextual
 function handleContextMenuAction(info, tab) {
   if (info.menuItemId === "create-new-group") {
-    // Crear una página emergente para solicitar el nombre del grupo
-    browser.windows.create({
-      url: "/popup/create-group.html",
-      type: "popup",
-      width: 300,
-      height: 200
-    }).then(popupWindow => {
-      // Guardar la información de la pestaña para usarla cuando se cree el grupo
-      browser.storage.local.set({ tempTabInfo: { tabId: tab.id, windowId: popupWindow.id } });
+    // Guardar la información de la pestaña para usarla cuando se cree el grupo
+    browser.storage.local.set({ tempTabInfo: { tabId: tab.id } }).then(() => {
+      // Abrir el formulario en una nueva pestaña
+      browser.tabs.create({
+        url: "/popup/create-group.html",
+        active: true
+      }).then(newTab => {
+        // Guardar también el ID de la nueva pestaña para cerrarla después
+        browser.storage.local.get('tempTabInfo').then(result => {
+          if (result.tempTabInfo) {
+            result.tempTabInfo.popupTabId = newTab.id;
+            browser.storage.local.set({ tempTabInfo: result.tempTabInfo });
+          }
+        });
+      });
     });
   } else if (info.menuItemId.startsWith("group-")) {
     // Extraer el ID del grupo del ID del menú
@@ -166,64 +210,92 @@ function handleContextMenuAction(info, tab) {
 function createNewGroup(groupName, tab) {
   console.log("Creando nuevo grupo:", groupName, "para la pestaña:", tab.id);
   const groupId = Date.now().toString();
+  
+  // Asegurarse de que tabGroups esté inicializado
+  if (!tabGroups) {
+    tabGroups = {};
+  }
+  
+  // Crear el nuevo grupo con la pestaña actual
   tabGroups[groupId] = {
     name: groupName,
     tabs: [tab.id]
   };
   
-  // Guardar en almacenamiento local
-  browser.storage.local.set({ tabGroups }).then(() => {
-    console.log("Grupo guardado correctamente:", tabGroups);
-    // Actualizar el menú contextual para mostrar el nuevo grupo
-    updateContextMenu();
-    
-    // Mostrar notificación
-    browser.notifications.create({
-      type: "basic",
-      iconUrl: browser.runtime.getURL("icons/icon-48.svg"),
-      title: "Grupo creado",
-      message: `Pestaña añadida al nuevo grupo "${groupName}"`
-    });
-  });
+  console.log("Estructura del grupo antes de guardar:", JSON.stringify(tabGroups));
   
-  // El código de actualización del menú y notificación ya está en el bloque then() anterior
+  // Guardar en almacenamiento local
+  return browser.storage.local.set({ tabGroups }).then(() => {
+    // Verificar que se guardó correctamente
+    return browser.storage.local.get('tabGroups').then(result => {
+      console.log("Grupo guardado y verificado:", JSON.stringify(result.tabGroups));
+      // Actualizar el menú contextual para mostrar el nuevo grupo
+      updateContextMenu();
+      
+      // Mostrar notificación
+      browser.notifications.create({
+        type: "basic",
+        iconUrl: browser.runtime.getURL("icons/icon-48.svg"),
+        title: "Grupo creado",
+        message: `Pestaña añadida al nuevo grupo "${groupName}"`
+      });
+    });
+  }).catch(error => {
+    console.error("Error al guardar el grupo:", error);
+  });
 }
 
 // Función para añadir una pestaña a un grupo existente
 function addTabToGroup(tab, groupId) {
   console.log("Añadiendo pestaña", tab.id, "al grupo", groupId);
-  if (tabGroups[groupId]) {
-    // Verificar si la pestaña ya está en el grupo
-    if (!tabGroups[groupId].tabs.includes(tab.id)) {
-      tabGroups[groupId].tabs.push(tab.id);
-      
-      // Guardar en almacenamiento local
-      browser.storage.local.set({ tabGroups }).then(() => {
-        console.log("Pestaña añadida al grupo. Grupos actualizados:", tabGroups);
+  
+  // Primero obtener los grupos actualizados del almacenamiento
+  return browser.storage.local.get('tabGroups').then(result => {
+    // Asegurarse de que tabGroups esté actualizado con los datos del almacenamiento
+    tabGroups = result.tabGroups || {};
+    
+    if (tabGroups[groupId]) {
+      // Verificar si la pestaña ya está en el grupo
+      if (!tabGroups[groupId].tabs.includes(tab.id)) {
+        tabGroups[groupId].tabs.push(tab.id);
         
-        // Actualizar menú contextual
-        updateContextMenu();
+        console.log("Añadiendo pestaña al grupo. Estructura actualizada:", JSON.stringify(tabGroups));
         
-        // Notificar al usuario
+        // Guardar en almacenamiento local
+        return browser.storage.local.set({ tabGroups }).then(() => {
+          console.log("Pestaña añadida al grupo. Grupos actualizados:", JSON.stringify(tabGroups));
+          
+          // Actualizar menú contextual
+          updateContextMenu();
+          
+          // Notificar al usuario
+          browser.notifications.create({
+            type: "basic",
+            iconUrl: browser.runtime.getURL("icons/icon-48.svg"),
+            title: "Pestaña añadida",
+            message: `Se ha añadido la pestaña al grupo "${tabGroups[groupId].name}"`
+          });
+        }).catch(error => {
+          console.error("Error al guardar el grupo actualizado:", error);
+        });
+      } else {
+        // Notificar que la pestaña ya está en el grupo
         browser.notifications.create({
           type: "basic",
           iconUrl: browser.runtime.getURL("icons/icon-48.svg"),
-          title: "Pestaña añadida",
-          message: `Se ha añadido la pestaña al grupo "${tabGroups[groupId].name}"`
+          title: "Información",
+          message: `La pestaña ya está en el grupo "${tabGroups[groupId].name}"`
         });
-      });
+        return Promise.resolve();
+      }
     } else {
-      // Notificar que la pestaña ya está en el grupo
-      browser.notifications.create({
-        type: "basic",
-        iconUrl: browser.runtime.getURL("icons/icon-48.svg"),
-        title: "Información",
-        message: `La pestaña ya está en el grupo "${tabGroups[groupId].name}"`
-      });
+      console.error("Error: Grupo no encontrado", groupId);
+      return Promise.resolve();
     }
-  } else {
-    console.error("Error: Grupo no encontrado", groupId);
-  }
+  }).catch(error => {
+    console.error("Error al obtener los grupos:", error);
+    return Promise.reject(error);
+  });
 }
 
 // Manejar cuando se cierra una pestaña para eliminarla de los grupos

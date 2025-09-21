@@ -9,8 +9,7 @@
     "contextMenus",
     "storage",
     "notifications",
-    "activeTab",
-    "windows"
+    "activeTab"
   ],
   "background": {
     "scripts": ["background.js"]
