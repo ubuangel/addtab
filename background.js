@@ -13,7 +13,7 @@ browser.runtime.onInstalled.addListener(() => {
     browser.contextMenus.create({
       id: "add-to-tab-group",
       title: "Añadir a grupo de pestañas",
-      contexts: ["tab"]
+      contexts: ["tab", "page"]
     });
     
     // Actualizar los elementos del menú contextual
@@ -29,14 +29,14 @@ function updateContextMenu() {
     browser.contextMenus.create({
       id: "add-to-tab-group",
       title: "Añadir a grupo de pestañas",
-      contexts: ["tab"]
+      contexts: ["tab", "page"]
     });
     
     // Añadir opción para crear un nuevo grupo
     browser.contextMenus.create({
       id: "create-new-group",
       title: "Crear nuevo grupo...",
-      contexts: ["tab"],
+      contexts: ["tab", "page"],
       parentId: "add-to-tab-group"
     });
     
@@ -45,7 +45,7 @@ function updateContextMenu() {
       browser.contextMenus.create({
         id: "separator-1",
         type: "separator",
-        contexts: ["tab"],
+        contexts: ["tab", "page"],
         parentId: "add-to-tab-group"
       });
     }
@@ -55,7 +55,7 @@ function updateContextMenu() {
       browser.contextMenus.create({
         id: `group-${groupId}`,
         title: tabGroups[groupId].name,
-        contexts: ["tab"],
+        contexts: ["tab", "page"],
         parentId: "add-to-tab-group"
       });
     }
@@ -64,6 +64,21 @@ function updateContextMenu() {
 
 // Manejar clics en el menú contextual
 browser.contextMenus.onClicked.addListener((info, tab) => {
+  // Si el clic fue en una página y no en una pestaña, necesitamos obtener la pestaña activa
+  if (info.pageUrl && !tab.id) {
+    browser.tabs.query({active: true, currentWindow: true}).then(tabs => {
+      if (tabs.length > 0) {
+        handleContextMenuAction(info, tabs[0]);
+      }
+    });
+  } else {
+    // Si ya tenemos la información de la pestaña, procesamos directamente
+    handleContextMenuAction(info, tab);
+  }
+});
+
+// Función para manejar la acción del menú contextual
+function handleContextMenuAction(info, tab) {
   if (info.menuItemId === "create-new-group") {
     // Solicitar nombre para el nuevo grupo
     const groupName = prompt("Nombre del nuevo grupo:");
@@ -75,7 +90,7 @@ browser.contextMenus.onClicked.addListener((info, tab) => {
     const groupId = info.menuItemId.replace("group-", "");
     addTabToGroup(tab, groupId);
   }
-});
+}
 
 // Función para crear un nuevo grupo
 function createNewGroup(groupName, tab) {
@@ -148,13 +163,6 @@ browser.tabs.onRemoved.addListener((tabId) => {
   if (updated) {
     browser.storage.local.set({ tabGroups });
     updateContextMenu();
-  }
-});
-
-// Añadir comando para mostrar todas las pestañas de un grupo
-browser.commands.onCommand.addListener((command) => {
-  if (command === "show-group-tabs") {
-    showGroupTabsPanel();
   }
 });
 
