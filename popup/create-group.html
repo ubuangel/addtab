@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Crear Nuevo Grupo</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 15px;
+      width: 270px;
+    }
+    h2 {
+      margin-top: 0;
+      color: #4a90e2;
+    }
+    input {
+      width: 100%;
+      padding: 8px;
+      margin: 10px 0;
+      box-sizing: border-box;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    button {
+      background-color: #4a90e2;
+      color: white;
+      border: none;
+      padding: 8px 15px;
+      margin: 5px 0;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #357ab8;
+    }
+    .buttons {
+      display: flex;
+      justify-content: space-between;
+    }
+  </style>
+</head>
+<body>
+  <h2>Crear Nuevo Grupo</h2>
+  <form id="groupForm">
+    <label for="groupName">Nombre del grupo:</label>
+    <input type="text" id="groupName" required autofocus>
+    <div class="buttons">
+      <button type="button" id="cancelButton">Cancelar</button>
+      <button type="submit">Crear</button>
+    </div>
+  </form>
+
+  <script src="create-group.js"></script>
+</body>
+</html>
