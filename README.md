@@ -69,6 +69,6 @@ Distribuido bajo la Licencia MIT. Consulta el archivo `LICENSE` para más inform
 
 ## Contacto
 
-Creador: [Tu Nombre] - [tu.email@ejemplo.com]
+Creador: Angel Andres Bejar - [andresbjar97@gmail.com]
 
 Enlace del proyecto: [https://github.com/tuusuario/add-to-tab-group](https://github.com/tuusuario/add-to-tab-group)
